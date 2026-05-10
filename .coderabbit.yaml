@@ -1,0 +1,37 @@
+# CodeRabbit configuration. Read on every event by the CodeRabbit GitHub App.
+# Schema: https://docs.coderabbit.ai/reference/configuration
+language: en-US
+early_access: false
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - master
+      - main
+  path_filters:
+    - "!**/bin/**"
+    - "!**/obj/**"
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/.next/**"
+    - "!**/.nuxt/**"
+    - "!**/__pycache__/**"
+    - "!**/venv/**"
+    - "!**/.venv/**"
+    - "!**/coverage/**"
+    - "!**/*.lock"
+    - "!**/*.min.js"
+    - "!**/*.min.css"
+    - "!**/wwwroot/lib/**"
+    - "!**/.gsd-*/**"
+    - "!**/transcripts/**"
+chat:
+  auto_reply: true
