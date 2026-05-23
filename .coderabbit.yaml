@@ -1,21 +1,134 @@
-# CodeRabbit configuration. Read on every event by the CodeRabbit GitHub App.
-# Schema: https://docs.coderabbit.ai/reference/configuration
+# CodeRabbit configuration — MAXIMUM review aggression (fleet-wide standard).
+# Multi-language: C#/.NET + Blazor, Python, JS/TS, CSS, PowerShell. Per-language rules
+# only fire on matching files, so this single config is safe on any repo.
+# Read on every event by the CodeRabbit GitHub App. Schema: https://docs.coderabbit.ai/reference/configuration
 language: en-US
-early_access: false
+early_access: true
+enable_free_tier: true
+inheritance: false                    # use this repo's own config; don't inherit an org-level one
+
+# Blunt, security-first reviewer persona (<=250 chars).
+tone_instructions: >-
+  Be thorough, direct, security-first. Flag every real issue: correctness,
+  security, performance, a11y, maintainability. Give concrete code fixes,
+  don't withhold nits. Assume code is AI-generated; verify it works.
+
 reviews:
-  profile: assertive
-  request_changes_workflow: false
+  profile: assertive                  # most opinionated review profile
+  request_changes_workflow: true      # submit REQUEST_CHANGES, not just comments
   high_level_summary: true
-  poem: false
   review_status: true
-  collapse_walkthrough: false
+  commit_status: true
+  fail_commit_status: false           # surface issues, but don't hard-block merges via red status
+  poem: false
+  collapse_walkthrough: false         # expand the full walkthrough by default
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  auto_apply_labels: true
+  suggested_reviewers: true
+  enable_prompt_for_ai_agents: true   # emit agent-ready fix prompts
+  abort_on_close: true
+
+  # Catch low-effort / hallucinated AI output (much of this fleet is AI-authored).
+  slop_detection:
+    enabled: true
+
   auto_review:
     enabled: true
-    drafts: true                    # force-review draft PRs too
-    auto_incremental_review: true   # re-review on every push (not just PR open)
-    ignore_title_keywords: []       # don't skip "WIP" / "DO NOT MERGE"
-    labels: []                      # don't filter by labels
-    # base_branches NOT set → review PRs targeting ANY base branch
+    drafts: true                      # review draft PRs too
+    auto_incremental_review: true     # re-review on every push, not just on open
+    auto_pause_after_reviewed_commits: 1000   # effectively never auto-pause
+    base_branches:
+      - ".*"                          # review PRs targeting ANY base branch
+    ignore_title_keywords: []         # do NOT skip WIP / DO NOT MERGE / etc.
+    labels: []                        # do NOT gate reviews on labels
+    ignore_usernames: []
+
+  # Proactively offer docstrings, tests, and simplifications.
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+    simplify:
+      enabled: true
+
+  # Non-blocking quality gates surfaced on every PR (warnings, not merge blockers).
+  pre_merge_checks:
+    docstrings:
+      mode: warning
+      threshold: 80
+    title:
+      mode: warning
+    description:
+      mode: warning
+    issue_assessment:
+      mode: warning
+
+  path_instructions:
+    - path: "**/*.cs"
+      instructions: |
+        C# / .NET — review strictly:
+        - Enforce nullable reference types; flag possible null deref and missing guard clauses.
+        - async/await: no `async void` (except event handlers); no `.Result` / `.Wait()` / `.GetAwaiter().GetResult()` (deadlock/blocking); thread CancellationToken; ConfigureAwait(false) in library code.
+        - DI lifetimes: no captive dependencies (singleton capturing scoped/transient); register with the correct lifetime.
+        - EF Core: no N+1; AsNoTracking for read-only queries; avoid client-side evaluation of large sets; parameterized queries only; schema changes via migrations, NOT manual SQL/DDL.
+        - IDisposable / IAsyncDisposable: dispose owned resources; prefer `using`.
+        - Validate all external/API input; never trust client data. Flag SQL injection, path traversal, SSRF, deserialization, and secret leakage.
+        - Robust exception handling; never silently swallow exceptions.
+    - path: "**/*.razor"
+      instructions: |
+        Blazor components:
+        - Lifecycle: no blocking/synchronous I/O in OnInitialized; use OnInitializedAsync; guard re-entrancy.
+        - Dispose event subscriptions, timers, and IDisposable; implement IDisposable when subscribing.
+        - Treat [Parameter] values as immutable.
+        - Accessibility is REQUIRED: semantic HTML, ARIA roles/labels, full keyboard operability, visible focus, label/control association, dialog focus trapping.
+        - XSS: any MarkupString / raw HTML MUST be sanitized (HtmlSanitizer); never render untrusted HTML.
+        - Correct StateHasChanged usage; avoid needless re-renders; use @key in loops.
+    - path: "**/*.py"
+      instructions: |
+        Python:
+        - PEP 8; type hints on public functions; specific exception handling (no bare `except:`).
+        - Security: validate/sanitize input; never eval/exec untrusted data; parameterized SQL; no hardcoded secrets; no `pickle`/unsafe deserialization on untrusted data; avoid `subprocess(..., shell=True)` with untrusted input.
+        - Use context managers for resources; no mutable default arguments.
+        - Async: never block the event loop; await all coroutines; thread cancellation.
+    - path: "**/*.{js,mjs,ts,tsx,jsx}"
+      instructions: |
+        - Security first: prevent XSS (sanitize before DOM insertion); no eval / new Function; no innerHTML with untrusted data.
+        - TypeScript: strict typing, no implicit any, null-safety; verify React hook usage and a11y for components.
+        - Proper error handling; no unhandled promise rejections; no leftover console.* in shipped code.
+    - path: "**/*.css"
+      instructions: |
+        - Maintainability: avoid !important; keep specificity low; reuse existing design tokens/CSS variables.
+        - Responsive and dark-mode safe; meet WCAG AA color contrast.
+    - path: "**/*.{ps1,psm1}"
+      instructions: |
+        PowerShell:
+        - Strict error handling ($ErrorActionPreference='Stop' or -ErrorAction Stop) wrapped in try/catch.
+        - No plaintext secrets/credentials; use secret stores / SecureString.
+        - Validate parameters (typed params, [ValidateNotNullOrEmpty]); never Invoke-Expression untrusted input.
+        - Use approved verbs; keep operations idempotent.
+    - path: "**/*{Test,Tests,Spec}*.cs"
+      instructions: |
+        C# tests MUST exercise real code paths: no fake/placeholder tests, no asserting only on mocks, no trivially-true assertions. Cover edge cases, error paths, and boundaries; tests must be deterministic; mock only true external boundaries; flag new/changed behavior lacking coverage.
+    - path: "**/{test_*,*_test,conftest}.py"
+      instructions: |
+        Python tests MUST exercise real code paths: no trivially-true assertions; cover edge and error cases; deterministic; mock only true external boundaries; flag uncovered new behavior.
+    - path: ".github/workflows/*.{yml,yaml}"
+      instructions: |
+        GitHub Actions security:
+        - Least-privilege `permissions:`; never blanket write-all.
+        - Pin third-party actions to a full commit SHA.
+        - No script injection: never interpolate ${{ github.event.* }} text into run: shells; use env vars + intermediate variables.
+        - Beware pull_request_target checking out PR head with secrets in scope.
+        - Set job timeouts; fail fast.
+
+  # Build artifacts and vendored/generated files only — everything else is reviewed.
   path_filters:
     - "!**/bin/**"
     - "!**/obj/**"
@@ -25,6 +138,7 @@ reviews:
     - "!**/.next/**"
     - "!**/.nuxt/**"
     - "!**/__pycache__/**"
+    - "!**/*.pyc"
     - "!**/venv/**"
     - "!**/.venv/**"
     - "!**/coverage/**"
@@ -32,7 +146,44 @@ reviews:
     - "!**/*.min.js"
     - "!**/*.min.css"
     - "!**/wwwroot/lib/**"
+    - "!**/Migrations/*.Designer.cs"
     - "!**/.gsd-*/**"
     - "!**/transcripts/**"
+
 chat:
   auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true                     # let reviews pull in current external context
+  code_guidelines:
+    enabled: true
+    filePatterns:                     # enforce each repo's own documented standards
+      - "**/CLAUDE.md"
+      - "**/AGENTS.md"
+      - ".github/copilot-instructions.md"
+      - "**/requirements.md"
+      - "docs/**/*.md"
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto
+
+# On-demand code generation (docstrings / unit tests).
+code_generation:
+  docstrings:
+    path_instructions: []
+  unit_tests:
+    path_instructions: []
+
+# Auto-generate an implementation plan on every new/updated issue (native — no workflow required).
+issue_enrichment:
+  auto_enrich:
+    enabled: true
+  planning:
+    enabled: true
+    auto_planning:
+      enabled: true
